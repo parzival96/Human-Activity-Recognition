@@ -1,0 +1,121 @@
+---
+title: "Human-Activity-Recognition"
+author: "Sri Vamsi"
+date: "7/2/2020"
+output: html_document
+---
+
+## 1. Introduction
+ This project is mainly concentrated at the task of human activity recognition using various other parameters that have been gathered using fitness watches. The end point of the project loooks at the predictions made on a test set of 20 observations to check the validity and accuracy of the model. 
+ 
+## 2. Problem statement
+  Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3xsbS5bVX
+
+## 3. Downloading the dataset
+
+```{r ,echo=TRUE}
+# Downloading training dataset
+if(!file.exists("./data")){dir.create("./data")}
+trainingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url = trainingUrl , destfile = "./data/training.csv")
+# Downloading testing dataset
+testingUrl<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url = testingUrl , destfile = "./data/testing.csv")
+```
+## 4. Creating a partition in the training data
+
+```{r}
+library(caret)
+trainingData <- read.csv("./data/training.csv" , sep = ",")
+testingData <- read.csv("./data/testing.csv" , sep = ",")
+inTrain <- createDataPartition(trainingData$classe , p = 0.7 , list = FALSE)
+Trainset <- trainingData[inTrain,]
+Testset <- trainingData[-inTrain,]
+```
+
+## 5. Cleaning the input data
+This process involves two steps. In the first step, we attempt to remove the variables with no observations. Along with this we also remove those variables that have nearly zero variance as they would only add to the load but not help in prediction. In the final step we remove the first few columns that have only been added for the purpose of naming or identification but not with any quantitative significance.
+```{r , echo=TRUE}
+# remove variables with nearly zero variance
+x <- nearZeroVar(Trainset)
+Trainset <- Trainset[,-x]
+Testset <- Testset[,-x]
+
+# remove variables with mostly NA variables
+cleanTraining <- Trainset[,colSums(is.na(Trainset)) == 0]
+cleanTesting <- Testset[,colSums(is.na(Testset)) == 0]
+dim(cleanTraining)
+dim(cleanTesting)
+
+# remove the first few columns as they are only for identification
+cleanTraining <- cleanTraining[,-(1:5)]
+cleanTesting <- cleanTesting[,-(1:5)]
+dim(cleanTesting)
+dim(cleanTraining)
+```
+## 6. Correlation Analysis
+ Correlation is visually established with the help of the shades in each block of table.
+```{r ,echo=TRUE}
+library(corrplot)
+correlation <- cor(cleanTraining[,-54])
+corrplot(correlation , order = "FPC" ,method = "number", type = "lower", tl.cex = 0.8, tl.col = rgb(0,0,0))
+```
+
+Model Building:
+
+## 7. Classification Trees
+```{r , echo=TRUE}
+library(caret)
+library(rpart)
+library(rattle)
+set.seed(101)
+modfit <- rpart(classe ~ . , data = cleanTraining , method = "class")
+fancyRpartPlot(modfit)
+test1 <- predict(modfit , newdata = cleanTesting , type = "class")
+confMatrix <- confusionMatrix(test1 , cleanTesting$classe)
+confMatrix
+
+```
+
+## 8. Random Forest
+
+```{r , echo=TRUE}
+ library(randomForest)
+ set.seed(12345)
+ controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+ modFitRandForest <- train(classe ~ ., data=cleanTraining, method="rf",                           trControl=controlRF)
+ modFitRandForest$finalModel
+ predictRF <- predict(modFitRandForest , newdata = cleanTesting )
+ confMatrix_2 <- confusionMatrix(predictRF , cleanTesting$classe )
+ confMatrix_2
+```
+
+## 9. Generalized Boosted Model
+
+```{r ,echo=TRUE}
+set.seed(12345)
+gbm <- trainControl(method = "repeatedcv" , number = 5 , repeats = 1)
+modfitGbm <- train(classe ~ ., data = cleanTraining , method = "gbm" , trControl = gbm , verbose = FALSE)
+modfitGbm$finalModel
+predictGbm <- predict(modfitGbm , newdata = cleanTesting)
+confMatrix_3 <- confusionMatrix(predictGbm , cleanTesting$classe)
+confMatrix_3
+```
+ 
+## 10. Choosing the model
+ The model is chosen based on its accuracy in predictions made.
+ 
+ Accuracies:
+ Classification Trees : 0.8331
+ Random Forests       : 0.9975
+                GBM   : 0.9878
+                
+## 11. Applying on the test set
+ 
+```{r , echo=TRUE}
+ prediction <- predict(modFitRandForest , newdata = testingData)
+ prediction
+```
+                
